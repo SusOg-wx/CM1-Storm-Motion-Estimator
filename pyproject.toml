@@ -1,0 +1,44 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "cm1-storm-motion-estimator"
+version = "0.1.0"
+description = "Scientific desktop application for estimating CM1 storm motion from preliminary simulations."
+readme = "README.md"
+requires-python = ">=3.10"
+authors = [{ name = "CM1 Storm Motion Estimator Team" }]
+license = { text = "MIT" }
+keywords = ["CM1", "storm", "meteorology", "netcdf", "tracking", "scientific"]
+dependencies = [
+  "numpy>=1.24",
+  "scipy>=1.11",
+  "pandas>=2.0",
+  "xarray>=2024.1",
+  "netCDF4>=1.6",
+  "PySide6>=6.6",
+  "pyqtgraph>=0.13",
+  "matplotlib>=3.7",
+  "pytest>=7.0"
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=7.0",
+  "pytest-cov>=4.0",
+  "ruff>=0.3.0"
+]
+
+[project.scripts]
+cm1-storm-motion-estimator = "cm1_storm_motion_estimator.__main__:main"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]

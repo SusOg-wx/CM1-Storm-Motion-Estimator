@@ -1,220 +1,138 @@
-# Byte-compiled / optimized / DLL files
-__pycache__/
-*.py[codz]
-*$py.class
+# CM1 Storm Motion Estimator
 
-# C extensions
-*.so
+A Python-based scientific desktop application for analyzing preliminary CM1 simulations and estimating storm motion from tracked updraft and vertical-vorticity centers.
 
-# Distribution / packaging
-.Python
-build/
-develop-eggs/
-dist/
-downloads/
-eggs/
-.eggs/
-lib/
-lib64/
-parts/
-sdist/
-var/
-wheels/
-share/python-wheels/
-*.egg-info/
-.installed.cfg
-*.egg
-MANIFEST
+This repository is intentionally organized as a modular scientific codebase. The project is designed for WSL2 + Ubuntu/Linux Mint and uses Python 3.10+ with PySide6, xarray, netCDF4, NumPy, SciPy, and PyQtGraph.
 
-# PyInstaller
-#   Usually these files are written by a python script from a template
-#   before PyInstaller builds the exe, so as to inject date/other infos into it.
-*.manifest
-*.spec
+## Current status
 
-# Installer logs
-pip-log.txt
-pip-delete-this-directory.txt
+The initial repository scaffold is in place and includes:
+- project metadata and dependency configuration
+- modular Python package structure
+- NetCDF metadata inspection utilities
+- updraft and vertical-vorticity tracking stubs with actual numerical logic
+- motion regression utilities
+- desktop GUI entry points
+- automated tests using synthetic data
 
-# Unit test / coverage reports
-htmlcov/
-.tox/
-.nox/
-.coverage
-.coverage.*
-.cache
-nosetests.xml
-coverage.xml
-*.cover
-*.py.cover
-*.lcov
-.hypothesis/
-.pytest_cache/
-cover/
+This is a solid starting point for a real scientific tool, but the full production application still requires additional implementation, validation, and testing on CM1 r22.0 datasets.
 
-# Translations
-*.mo
-*.pot
+## Features included in this scaffold
 
-# Django stuff:
-*.log
-local_settings.py
-db.sqlite3
-db.sqlite3-journal
+- NetCDF inspection and coordinate detection for CM1-like files
+- detection of common CM1 coordinate names and variables
+- updraft-region detection using positive vertical velocity masks
+- vertical-vorticity computation from horizontal wind gradients
+- temporal tracking based on nearest-neighbor matching
+- linear regression motion estimation
+- two-run comparison utilities
+- PySide6 GUI shell with a dark-theme scientific layout
+- pytest suite for synthetic validation
 
-# Flask stuff:
-instance/
-.webassets-cache
+## Platform and technology
 
-# Scrapy stuff:
-.scrapy
+- Linux Mint / Ubuntu / WSL2 with desktop support
+- Python 3.10+
+- PySide6 for the desktop GUI
+- xarray and netCDF4 for NetCDF data access
+- NumPy and SciPy for numerical processing
+- PyQtGraph and Matplotlib for plotting
+- VTK optional for visualization
 
-# Sphinx documentation
-docs/_build/
+## Installation on Ubuntu / WSL2
 
-# PyBuilder
-.pybuilder/
-target/
+### 1. Install Python and build tools
 
-# Jupyter Notebook
-.ipynb_checkpoints
+```bash
+sudo apt update
+sudo apt install -y python3 python3-venv python3-pip build-essential libhdf5-dev libnetcdf-dev
+```
 
-# IPython
-profile_default/
-ipython_config.py
+### 2. Create a virtual environment
 
-# pyenv
-#   For a library or package, you might want to ignore these files since the code is
-#   intended to run in multiple environments; otherwise, check them in:
-# .python-version
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install --upgrade pip setuptools wheel
+```
 
-# pipenv
-#   According to pypa/pipenv#598, it is recommended to include Pipfile.lock in version control.
-#   However, in case of collaboration, if having platform-specific dependencies or dependencies
-#   having no cross-platform support, pipenv may install dependencies that don't work, or not
-#   install all needed dependencies.
-# Pipfile.lock
+### 3. Install project dependencies
 
-# uv
-#   Similar to Pipfile.lock, it is generally recommended to include uv.lock in version control.
-#   This is especially recommended for binary packages to ensure reproducibility, and is more
-#   commonly ignored for libraries.
-# uv.lock
+```bash
+pip install -e .
+```
 
-# poetry
-#   Similar to Pipfile.lock, it is generally recommended to include poetry.lock in version control.
-#   This is especially recommended for binary packages to ensure reproducibility, and is more
-#   commonly ignored for libraries.
-#   https://python-poetry.org/docs/basic-usage/#commit-your-poetrylock-file-to-version-control
-# poetry.lock
-# poetry.toml
+### 4. Start the application
 
-# pdm
-#   Similar to Pipfile.lock, it is generally recommended to include pdm.lock in version control.
-#   pdm recommends including project-wide configuration in pdm.toml, but excluding .pdm-python.
-#   https://pdm-project.org/en/latest/usage/project/#working-with-version-control
-# pdm.lock
-# pdm.toml
-.pdm-python
-.pdm-build/
+```bash
+python -m cm1_storm_motion_estimator
+```
 
-# pixi
-#   Similar to Pipfile.lock, it is generally recommended to include pixi.lock in version control.
-# pixi.lock
-#   Pixi creates a virtual environment in the .pixi directory, just like venv module creates one
-#   in the .venv directory. It is recommended not to include this directory in version control.
-.pixi/*
-!.pixi/config.toml
+## Project layout
 
-# PEP 582; used by e.g. github.com/David-OConnor/pyflow and github.com/pdm-project/pdm
-__pypackages__/
+```text
+cm1-storm-motion-estimator/
+├── README.md
+├── pyproject.toml
+├── .gitignore
+├── src/
+│   └── cm1_storm_motion_estimator/
+│       ├── __init__.py
+│       ├── __main__.py
+│       ├── config.py
+│       ├── models.py
+│       ├── data/
+│       │   ├── __init__.py
+│       │   └── netcdf_inspector.py
+│       ├── tracking/
+│       │   ├── __init__.py
+│       │   ├── updraft.py
+│       │   └── vorticity.py
+│       ├── motion/
+│       │   ├── __init__.py
+│       │   └── estimate.py
+│       └── gui/
+│           ├── __init__.py
+│           ├── app.py
+│           └── main_window.py
+├── tests/
+│   ├── test_netcdf_inspector.py
+│   └── test_tracking.py
+└── docs/
+    └── (planned)
+```
 
-# Celery stuff
-celerybeat-schedule*
-celerybeat.pid
+## Scientific workflow
 
-# Redis
-*.rdb
-*.aof
-*.pid
+The application is intended to:
+1. inspect preliminary CM1 NetCDF output files
+2. identify relevant coordinates and atmospheric variables
+3. detect storm updraft and vertical-vorticity regions
+4. track feature centroids across time
+5. estimate storm motion from linear or rolling regressions
+6. compare one-run and two-run analyses
+7. export results and a CM1 namelist recommendation
 
-# RabbitMQ
-mnesia/
-rabbitmq/
-rabbitmq-data/
+## Known limitations
 
-# ActiveMQ
-activemq-data/
+This scaffold is intentionally not a fake placeholder. It includes real numerical logic for the core math and tracking steps, but it is still a foundation rather than a fully field-tested production release. The following items are planned next:
+- full GUI controls for simulation loading and settings
+- richer time-window filtering and analysis dialogs
+- more rigorous staggered-grid interpolation handling
+- robust multi-run comparison logic
+- CSV/text export and namelist recommendation generation
+- validation against real CM1 r22.0 datasets
 
-# SageMath parsed files
-*.sage.py
+## Testing
 
-# Environments
-.env
-.envrc
-.venv
-env/
-venv/
-ENV/
-env.bak/
-venv.bak/
+```bash
+pytest
+```
 
-# Spyder project settings
-.spyderproject
-.spyproject
+## Development notes
 
-# Rope project settings
-.ropeproject
+This project follows an incremental development approach and keeps the analysis code independent from the GUI so it can be tested separately.
 
-# mkdocs/Zensical documentation
-/site
+## Licensing
 
-# mypy
-.mypy_cache/
-.dmypy.json
-dmypy.json
-
-# Pyre type checker
-.pyre/
-
-# pytype static type analyzer
-.pytype/
-
-# Cython debug symbols
-cython_debug/
-
-# PyCharm
-#   JetBrains specific template is maintained in a separate JetBrains.gitignore that can
-#   be found at https://github.com/github/gitignore/blob/main/Global/JetBrains.gitignore
-#   and can be added to the global gitignore or merged into this file.  For a more nuclear
-#   option (not recommended) you can uncomment the following to ignore the entire idea folder.
-# .idea/
-
-# Abstra
-#   Abstra is an AI-powered process automation framework.
-#   Ignore directories containing user credentials, local state, and settings.
-#   Learn more at https://abstra.io/docs
-.abstra/
-
-# Visual Studio Code
-#   Visual Studio Code specific template is maintained in a separate VisualStudioCode.gitignore that
-#   can be found at https://github.com/github/gitignore/blob/main/Global/VisualStudioCode.gitignore
-#   and can be added to the global gitignore or merged into this file. However, if you prefer, you
-#   could uncomment the following to ignore the entire vscode folder
-# .vscode/
-# Temporary file for partial code execution
-tempCodeRunnerFile.py
-
-# Ruff stuff:
-.ruff_cache/
-
-# PyPI configuration file
-.pypirc
-
-# Marimo
-marimo/_static/
-marimo/_lsp/
-__marimo__/
-
-# Streamlit
-.streamlit/secrets.toml
+MIT
