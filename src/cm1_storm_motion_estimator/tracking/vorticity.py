@@ -18,9 +18,15 @@ class _Axis:
 
 _LENGTH_TO_METERS = {"m": 1.0, "meter": 1.0, "meters": 1.0, "km": 1000.0, "cm": 0.01}
 _WIND_TO_M_S = {
-    "m s-1": 1.0, "m/s": 1.0, "ms-1": 1.0, "m s^-1": 1.0,
-    "km h-1": 1.0 / 3.6, "km/h": 1.0 / 3.6,
+    "m s-1": 1.0,
+    "m/s": 1.0,
+    "ms-1": 1.0,
+    "m s^-1": 1.0,
+    "km h-1": 1.0 / 3.6,
+    "km/h": 1.0 / 3.6,
 }
+_X_DIMENSION_NAMES = {"xh", "xf"}
+_Y_DIMENSION_NAMES = {"yh", "yf"}
 
 
 def _unit_key(value: Any) -> str:
@@ -76,21 +82,37 @@ def _native_axis(field: xr.DataArray, axis: str) -> _Axis:
 
 
 def _validate_axis_association(field: xr.DataArray, x_axis: _Axis, y_axis: _Axis) -> None:
-    """Reject coordinates attached to the opposite horizontal dimension."""
+    """Reject wrong-axis associations while permitting arbitrary dimension labels.
+
+    CM1 axis dimension names xh/xf and yh/yf are meaningful: a coordinate
+    named xh/xf attached to a yh/yf dimension (or vice versa) is contradictory.
+    Other dimension names are treated as opaque; their association is determined
+    by the attached native coordinate and checked against the field shape.
+    """
     if x_axis.dim == y_axis.dim:
         raise ValueError("x and y coordinates cannot be associated with the same field dimension")
-    for axis, own, opposite_names in (
-        ("x", x_axis, ("yh", "yf")),
-        ("y", y_axis, ("xh", "xf")),
+    if x_axis.dim in _Y_DIMENSION_NAMES:
+        raise ValueError(
+            f"Incompatible coordinate association: x coordinate {x_axis.name!r} "
+            f"is attached to y-axis dimension {x_axis.dim!r}"
+        )
+    if y_axis.dim in _X_DIMENSION_NAMES:
+        raise ValueError(
+            f"Incompatible coordinate association: y coordinate {y_axis.name!r} "
+            f"is attached to x-axis dimension {y_axis.dim!r}"
+        )
+    for opposite_names, own_axis, opposite_label in (
+        (("yh", "yf"), x_axis, "y"),
+        (("xh", "xf"), y_axis, "x"),
     ):
         for name in opposite_names:
             if name in field.coords:
                 coordinate = field.coords[name]
-                if coordinate.ndim == 1 and coordinate.dims == (own.dim,):
+                if coordinate.ndim == 1 and coordinate.dims == (own_axis.dim,):
                     raise ValueError(
-                        f"Coordinate association is incompatible: {axis}-axis coordinate "
-                        f"{own.name!r} and opposite-axis coordinate {name!r} both map to "
-                        f"dimension {own.dim!r}"
+                        f"Incompatible coordinate association: {opposite_label}-axis coordinate "
+                        f"{name!r} is attached to {own_axis.dim!r}, already identified as the "
+                        f"other horizontal axis"
                     )
 
 
@@ -151,12 +173,7 @@ def compute_relative_vorticity(
     mass_x_dim: str | None = None,
     mass_y_dim: str | None = None,
 ) -> xr.DataArray:
-    """Compute ζ = dv/dx - du/dy on a supplied physical mass grid.
-
-    Linear interpolation is performed in physical coordinates without
-    extrapolation. Derivatives use nonuniform finite differences; all lengths
-    are converted to metres and winds to m s-1. Missing inputs are rejected.
-    """
+    """Compute ζ = dv/dx - du/dy on a supplied physical mass grid."""
     if not isinstance(u, xr.DataArray) or not isinstance(v, xr.DataArray):
         raise TypeError("u and v must be xarray.DataArray objects carrying dimensions and coordinates")
     ux, uy = _native_axis(u, "x"), _native_axis(u, "y")
