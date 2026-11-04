@@ -16,20 +16,10 @@ class _Axis:
     dim: str
 
 
-_LENGTH_TO_METERS = {
-    "m": 1.0,
-    "meter": 1.0,
-    "meters": 1.0,
-    "km": 1000.0,
-    "cm": 0.01,
-}
+_LENGTH_TO_METERS = {"m": 1.0, "meter": 1.0, "meters": 1.0, "km": 1000.0, "cm": 0.01}
 _WIND_TO_M_S = {
-    "m s-1": 1.0,
-    "m/s": 1.0,
-    "ms-1": 1.0,
-    "m s^-1": 1.0,
-    "km h-1": 1.0 / 3.6,
-    "km/h": 1.0 / 3.6,
+    "m s-1": 1.0, "m/s": 1.0, "ms-1": 1.0, "m s^-1": 1.0,
+    "km h-1": 1.0 / 3.6, "km/h": 1.0 / 3.6,
 }
 
 
@@ -85,7 +75,26 @@ def _native_axis(field: xr.DataArray, axis: str) -> _Axis:
     return _validate_axis(coordinate.values, name, coordinate.attrs.get("units"), coordinate.dims[0])
 
 
-def _target_axis(value: Any, name: str, units: Any, dim: str | None) -> _Axis:
+def _validate_axis_association(field: xr.DataArray, x_axis: _Axis, y_axis: _Axis) -> None:
+    """Reject coordinates attached to the opposite horizontal dimension."""
+    if x_axis.dim == y_axis.dim:
+        raise ValueError("x and y coordinates cannot be associated with the same field dimension")
+    for axis, own, opposite_names in (
+        ("x", x_axis, ("yh", "yf")),
+        ("y", y_axis, ("xh", "xf")),
+    ):
+        for name in opposite_names:
+            if name in field.coords:
+                coordinate = field.coords[name]
+                if coordinate.ndim == 1 and coordinate.dims == (own.dim,):
+                    raise ValueError(
+                        f"Coordinate association is incompatible: {axis}-axis coordinate "
+                        f"{own.name!r} and opposite-axis coordinate {name!r} both map to "
+                        f"dimension {own.dim!r}"
+                    )
+
+
+def _target_axis(value: Any, name: str, units: str | None, dim: str | None) -> _Axis:
     if isinstance(value, xr.DataArray):
         if value.ndim != 1:
             raise ValueError(f"Target coordinate {name!r} must be one-dimensional")
@@ -96,10 +105,7 @@ def _target_axis(value: Any, name: str, units: Any, dim: str | None) -> _Axis:
     else:
         if units is None:
             raise ValueError(f"Units for target coordinate {name!r} must be supplied")
-        values = value
-        target_dim = dim or name
-        target_units = units
-        target_name = name
+        values, target_dim, target_units, target_name = value, dim or name, units, name
     return _validate_axis(values, target_name, target_units, target_dim)
 
 
@@ -117,36 +123,20 @@ def _orient(field: xr.DataArray, y_axis: _Axis, x_axis: _Axis) -> np.ndarray:
     return values
 
 
-def _ascending(axis: _Axis, values: np.ndarray, *, x_axis: bool) -> tuple[np.ndarray, np.ndarray]:
-    if axis.values[0] < axis.values[-1]:
-        return axis.values, values
-    return axis.values[::-1], values[:, ::-1] if x_axis else values[::-1, :]
-
-
-def _interpolate_to_mass(
-    field: np.ndarray, source_y: _Axis, source_x: _Axis, target_y: _Axis, target_x: _Axis
-) -> np.ndarray:
+def _interpolate_to_mass(field: np.ndarray, source_y: _Axis, source_x: _Axis, target_y: _Axis, target_x: _Axis) -> np.ndarray:
     sx = source_x.values * _length_scale(source_x.units, source_x.name)
     sy = source_y.values * _length_scale(source_y.units, source_y.name)
     tx = target_x.values * _length_scale(target_x.units, target_x.name)
     ty = target_y.values * _length_scale(target_y.units, target_y.name)
-    # Convert source field axes to ascending order for RegularGridInterpolator.
     if sy[0] > sy[-1]:
-        sy = sy[::-1]
-        field = field[::-1, :]
+        sy, field = sy[::-1], field[::-1, :]
     if sx[0] > sx[-1]:
-        sx = sx[::-1]
-        field = field[:, ::-1]
-    interpolator = RegularGridInterpolator(
-        (sy, sx), field, method="linear", bounds_error=False, fill_value=np.nan
-    )
+        sx, field = sx[::-1], field[:, ::-1]
+    interpolator = RegularGridInterpolator((sy, sx), field, method="linear", bounds_error=False, fill_value=np.nan)
     yy, xx = np.meshgrid(ty, tx, indexing="ij")
     result = interpolator(np.column_stack((yy.ravel(), xx.ravel()))).reshape(ty.size, tx.size)
     if not np.all(np.isfinite(result)):
-        raise ValueError(
-            "The requested mass grid extends beyond a wind component's native grid; "
-            "linear extrapolation is not performed. Use the common in-domain grid."
-        )
+        raise ValueError("The requested mass grid extends beyond a wind component's native grid; linear extrapolation is not performed.")
     return result
 
 
@@ -161,51 +151,35 @@ def compute_relative_vorticity(
     mass_x_dim: str | None = None,
     mass_y_dim: str | None = None,
 ) -> xr.DataArray:
-    """Compute CM1 vertical relative vorticity on the supplied mass grid.
+    """Compute ζ = dv/dx - du/dy on a supplied physical mass grid.
 
-    Parameters
-    ----------
-    u, v:
-        Two-dimensional xarray wind fields from one time and height. Their
-        native horizontal coordinates must be named xh/xf and yh/yf and carry
-        explicit coordinate units. Wind data must have recognized speed units.
-    mass_x, mass_y:
-        Target mass-grid coordinates, as one-dimensional DataArrays with units,
-        or arrays accompanied by ``mass_x_units``/``mass_y_units``. Target
-        coordinates must lie inside both wind fields' domains.
-
-    Components are linearly interpolated in physical space to the target grid
-    when their native coordinates differ from the target coordinates. Derivatives
-    use NumPy's second-order nonuniform finite-difference formula (first order
-    only when an axis has exactly two points). Coordinates are converted to metres
-    and wind speeds to m s-1 internally. The returned DataArray is in s-1.
-    Missing values are rejected rather than filled or silently masked.
+    Linear interpolation is performed in physical coordinates without
+    extrapolation. Derivatives use nonuniform finite differences; all lengths
+    are converted to metres and winds to m s-1. Missing inputs are rejected.
     """
     if not isinstance(u, xr.DataArray) or not isinstance(v, xr.DataArray):
         raise TypeError("u and v must be xarray.DataArray objects carrying dimensions and coordinates")
     ux, uy = _native_axis(u, "x"), _native_axis(u, "y")
     vx, vy = _native_axis(v, "x"), _native_axis(v, "y")
+    _validate_axis_association(u, ux, uy)
+    _validate_axis_association(v, vx, vy)
     mx = _target_axis(mass_x, "mass_x", mass_x_units, mass_x_dim)
     my = _target_axis(mass_y, "mass_y", mass_y_units, mass_y_dim)
+    if mx.dim == my.dim:
+        raise ValueError("Target x and y coordinates must use distinct dimensions")
 
     u_values = _orient(u, uy, ux)
     v_values = _orient(v, vy, vx)
     u_scale, _ = _wind_scale(u.attrs.get("units"), "u")
     v_scale, _ = _wind_scale(v.attrs.get("units"), "v")
-    u_values = u_values * u_scale
-    v_values = v_values * v_scale
-
-    u_mass = _interpolate_to_mass(u_values, uy, ux, my, mx)
-    v_mass = _interpolate_to_mass(v_values, vy, vx, my, mx)
+    u_mass = _interpolate_to_mass(u_values * u_scale, uy, ux, my, mx)
+    v_mass = _interpolate_to_mass(v_values * v_scale, vy, vx, my, mx)
 
     x_m = mx.values * _length_scale(mx.units, mx.name)
     y_m = my.values * _length_scale(my.units, my.name)
-    edge_order_x = 2 if x_m.size >= 3 else 1
-    edge_order_y = 2 if y_m.size >= 3 else 1
-    dvdx = np.gradient(v_mass, x_m, axis=1, edge_order=edge_order_x)
-    dudy = np.gradient(u_mass, y_m, axis=0, edge_order=edge_order_y)
+    dvdx = np.gradient(v_mass, x_m, axis=1, edge_order=2 if x_m.size >= 3 else 1)
+    dudy = np.gradient(u_mass, y_m, axis=0, edge_order=2 if y_m.size >= 3 else 1)
     zeta = dvdx - dudy
-
     return xr.DataArray(
         zeta,
         dims=(my.dim, mx.dim),
@@ -221,7 +195,7 @@ def compute_relative_vorticity(
             "definition": "zeta = dv/dx - du/dy",
             "horizontal_grid": "supplied common mass grid",
             "interpolation": "linear interpolation in physical coordinates; no extrapolation",
-            "differentiation": "second-order nonuniform finite differences; first-order for two-point axes",
+            "differentiation": "nonuniform finite differences; first-order for two-point axes",
             "wind_input_units": f"u: {u.attrs.get('units')}; v: {v.attrs.get('units')}",
             "coordinate_input_units": f"x: {mx.units}; y: {my.units}",
         },

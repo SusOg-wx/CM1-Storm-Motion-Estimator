@@ -7,14 +7,14 @@ from cm1_storm_motion_estimator.data.netcdf_source import CM1DataSource
 
 
 def _write_frame(path, time, reverse_dims=False):
-    values = np.arange(2 * 3 * 4, dtype=float).reshape(2, 3, 4)
+    # One time, two heights, three y points, four x points.
+    values = np.arange(1 * 2 * 3 * 4, dtype=float).reshape(1, 2, 3, 4)
     dims = ("time", "zh", "yh", "xh")
-    data = values
     if reverse_dims:
         dims = ("time", "zh", "xh", "yh")
-        data = values.transpose(0, 1, 3, 2)
+        values = values.transpose(0, 1, 3, 2)
     ds = xr.Dataset(
-        {"w": (dims, data, {"units": "m s-1"})},
+        {"w": (dims, values, {"units": "m s-1"})},
         coords={
             "time": [time],
             "zh": ("zh", [500.0, 1500.0], {"units": "m"}),
