@@ -19,19 +19,16 @@ def _field(values, x_name, x_dim, x, y_name, y_dim, y, units="m s-1"):
     )
 
 
-def _mass(x, y):
-    return (
-        xr.DataArray(x, dims=("yh",), attrs={"units": "m"}, name="xh"),
-        xr.DataArray(y, dims=("yh",), attrs={"units": "m"}, name="yh"),
-    )
-
-
 def test_uniform_winds_have_zero_vorticity():
     x = np.arange(5.0)
     y = np.arange(4.0)
     u = _field(np.full((4, 5), 7.0), "xh", "xh", x, "yh", "yh", y)
     v = _field(np.full((4, 5), -2.0), "xh", "xh", x, "yh", "yh", y)
-    result = compute_relative_vorticity(u, v, mass_x=xr.DataArray(x, dims="xh", attrs={"units": "m"}, name="xh"), mass_y=xr.DataArray(y, dims="yh", attrs={"units": "m"}, name="yh"))
+    result = compute_relative_vorticity(
+        u, v,
+        mass_x=xr.DataArray(x, dims="xh", attrs={"units": "m"}, name="xh"),
+        mass_y=xr.DataArray(y, dims="yh", attrs={"units": "m"}, name="yh"),
+    )
     np.testing.assert_allclose(result.values, 0.0, atol=1e-14)
     assert result.attrs["units"] == "s-1"
 
@@ -56,11 +53,9 @@ def test_staggered_components_interpolate_and_preserve_mass_coordinates():
     xf = np.array([0.0, 2.0, 4.5, 8.0, 12.0])
     yh = np.array([1.0, 4.0, 8.0])
     yf = np.array([0.0, 2.5, 6.0, 10.0])
-    u_xx, u_yy = np.meshgrid(xf, yh)
-    v_xx, v_yy = np.meshgrid(xh, yf)
     a, b = 0.002, 0.009
-    u = _field(a * u_yy, "xf", "xf", xf, "yh", "yh", yh)
-    v = _field(b * v_xx, "xh", "xh", xh, "yf", "yf", yf)
+    u = _field(a * np.meshgrid(xf, yh)[1], "xf", "xf", xf, "yh", "yh", yh)
+    v = _field(b * np.meshgrid(xh, yf)[0], "xh", "xh", xh, "yf", "yf", yf)
     target_x = xr.DataArray(xh, dims="xh", attrs={"units": "m"}, name="xh")
     target_y = xr.DataArray(yh, dims="yh", attrs={"units": "m"}, name="yh")
     result = compute_relative_vorticity(u, v, mass_x=target_x, mass_y=target_y)
@@ -71,7 +66,7 @@ def test_staggered_components_interpolate_and_preserve_mass_coordinates():
 
 
 def test_coordinates_can_be_descending_and_unit_converted():
-    x = np.array([4.0, 2.0, 0.0])  # km
+    x = np.array([4.0, 2.0, 0.0])
     y = np.array([3.0, 1.0, 0.0])
     xx, yy = np.meshgrid(x * 1000.0, y * 1000.0)
     u = _field(0.004 * yy, "xh", "xh", x, "yh", "yh", y)
@@ -124,6 +119,6 @@ def test_incompatible_target_grid_and_ambiguous_axes_rejected():
     with pytest.raises(ValueError, match="extends beyond"):
         compute_relative_vorticity(u, v, mass_x=mx, mass_y=my)
 
-    ambiguous = u.assign_coords(xh=("xh", np.arange(4.0)))
+    ambiguous = u.assign_coords(xh=("xf", np.arange(4.0)))
     with pytest.raises(ValueError, match="Cannot unambiguously identify"):
         compute_relative_vorticity(ambiguous, v, mass_x=mx, mass_y=my)

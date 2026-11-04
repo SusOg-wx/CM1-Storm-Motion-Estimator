@@ -1,10 +1,11 @@
 from __future__ import annotations
 
 import numpy as np
+import xarray as xr
 
 from cm1_storm_motion_estimator.data.netcdf_inspector import CM1DataInspector
 from cm1_storm_motion_estimator.tracking.updraft import detect_updraft_regions, weighted_region_center
-from cm1_storm_motion_estimator.tracking.vorticity import compute_relative_vorticity, detect_vorticity_regions
+from cm1_storm_motion_estimator.tracking.vorticity import compute_relative_vorticity
 
 
 def test_detect_updraft_regions_and_centroid() -> None:
@@ -18,16 +19,27 @@ def test_detect_updraft_regions_and_centroid() -> None:
     assert center[1] > 0
 
 
-def test_relative_vorticity_and_vorticity_regions() -> None:
-    x = np.linspace(0, 10, 20)
-    y = np.linspace(0, 10, 20)
+def test_relative_vorticity_uses_physical_coordinates() -> None:
+    x = np.linspace(0.0, 10.0, 20)
+    y = np.linspace(0.0, 10.0, 20)
     xx, yy = np.meshgrid(x, y, indexing="xy")
-    u = yy
-    v = xx
-    vort = compute_relative_vorticity(u, v, dx=1.0, dy=1.0)
-    assert vort.shape == u.shape
-    regions = detect_vorticity_regions(vort, threshold=0.05, min_region_pixels=10, sign=1)
-    assert isinstance(regions, list)
+    u = xr.DataArray(
+        np.zeros_like(yy), dims=("yh", "xh"),
+        coords={
+            "yh": xr.DataArray(y, dims="yh", attrs={"units": "m"}),
+            "xh": xr.DataArray(x, dims="xh", attrs={"units": "m"}),
+        }, attrs={"units": "m s-1"},
+    )
+    v = xr.DataArray(
+        2.0 * xx, dims=("yh", "xh"),
+        coords={
+            "yh": xr.DataArray(y, dims="yh", attrs={"units": "m"}),
+            "xh": xr.DataArray(x, dims="xh", attrs={"units": "m"}),
+        }, attrs={"units": "m s-1"},
+    )
+    vort = compute_relative_vorticity(u, v, mass_x=u.xh, mass_y=u.yh)
+    np.testing.assert_allclose(vort.values, 2.0, atol=1e-12)
+    assert vort.attrs["units"] == "s-1"
 
 
 def test_grid_spacing_detection() -> None:
